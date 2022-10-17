@@ -1,0 +1,25 @@
+{
+    "orders": [
+        {
+            "item": "BRAS",
+            "quantity": "1",
+            "price": "100",
+            "buyer": "Andronov",
+            "date": "23.12.1982"
+        },
+        {
+            "item": "ASR",
+            "quantity": "2",
+            "price": "200",
+            "buyer": "Zelenov",
+            "date": "09.01.2000"
+        },
+        {
+            "item": "CDN",
+            "quantity": "3",
+            "price": "300",
+            "buyer": "Petrov",
+            "date": "12.03.2026"
+        }
+    ]
+}
