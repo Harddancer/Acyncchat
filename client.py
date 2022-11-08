@@ -7,7 +7,7 @@ import time
 def presence(newuser):
     output = {
         "action": "presence",
-        "time": time.time(),
+        # "time": time.time(),
         "user": {"account_name": newuser}
     }
     return output
@@ -22,6 +22,7 @@ def push_coding_msg(host,port):
     s.send(encoded_msg)
     # s.close()
     print("сообщение отправлено")
+    print(s)
     return s
 # получаем сообщение с сервера и декодируем, формируем из json объекта словарь    
 def get_msgfromserver(socketsession):
