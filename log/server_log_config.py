@@ -1,0 +1,31 @@
+import sys
+import os
+import logging
+import logging.handlers
+LOGGER = logging.getLogger('server')
+
+# создаём формировщик логов
+format_msg = logging.Formatter('%(asctime)s %(levelname)s %(filename)s %(message)s')
+
+# Подготовка имени файла для логирования
+PATH = os.path.dirname(os.path.abspath(__file__))
+PATH = os.path.join(PATH, 'server.log')
+
+# создаём потоки вывода 
+handler_log = logging.StreamHandler(sys.stderr)
+handler_log.setFormatter(format_msg)
+handler_log.setLevel(logging.ERROR)
+LOGS = logging.handlers.TimedRotatingFileHandler(PATH, encoding='utf8', interval=1, when='D')
+LOGS.setFormatter(format_msg)
+
+# создаём регистратор и настраиваем его
+LOGGER.addHandler(handler_log)
+LOGGER.addHandler(LOGS)
+LOGGER.setLevel(logging.DEBUG)
+
+# отладка
+if __name__ == '__main__':
+    LOGGER.critical('Критическая ошибка')
+    LOGGER.error('Ошибка')
+    LOGGER.debug('Отладочная информация')
+    LOGGER.info('Информационное сообщение')
