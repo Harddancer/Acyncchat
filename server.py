@@ -1,7 +1,13 @@
-import socket
 import sys
 import json
-# получаем сообщение от клиента и декодируем, формируем из json словарь    
+import socket
+import logging
+import log.server_log_config
+from decor import log
+
+LOG = logging.getLogger('server')
+# получаем сообщение от клиента и декодируем, формируем из json словарь  
+@log  
 def get_msgfromclient(tr_socket):
     encoded_resp = tr_socket.recv(1024)
     if isinstance(encoded_resp, bytes):
@@ -14,9 +20,10 @@ def get_msgfromclient(tr_socket):
     raise ValueError
 
 # парсим и валидируем сообщение от клиента, формируем ответ 
+@log
 def answer_from_client(answerclient:dict):
     
-    if "action" in answerclient and answerclient["action"] == "presence" and "time" in answerclient \
+    if "action" in answerclient and answerclient["action"] == "presence" \
             and "user" in answerclient and answerclient["user"]["account_name"] == 'newuser':
         print("response: 200")
         return {"response": 200}
@@ -26,6 +33,7 @@ def answer_from_client(answerclient:dict):
         "error": 'Bad Request'
     }
 #  кодируем и отправляем ответ клиенту 
+@log
 def push_coding_msg_toclient(tr_socket,msgtoclient):
     js_msg = json.dumps(msgtoclient)
     encoded_msg = js_msg.encode("utf-8")
