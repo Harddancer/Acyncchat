@@ -1,9 +1,13 @@
 import sys
 import json
 import socket
-import time
+import log.client_log_config
+import logging
+from decor import log
 
+LOG = logging.getLogger('client')
 # формируем словарь dict  с атрибутами для нового пользователя
+@log
 def presence(newuser):
     output = {
         "action": "presence",
@@ -13,6 +17,7 @@ def presence(newuser):
     return output
    
 # формируем клиента и кодируем сообщение отправляем на сервер
+@log
 def push_coding_msg(host,port):
     s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     s.connect((host,port))
@@ -24,7 +29,8 @@ def push_coding_msg(host,port):
     print("сообщение отправлено")
     print(s)
     return s
-# получаем сообщение с сервера и декодируем, формируем из json объекта словарь    
+# получаем сообщение с сервера и декодируем, формируем из json объекта словарь 
+@log   
 def get_msgfromserver(socketsession):
     
     encoded_resp = socketsession.recv(1024)
@@ -38,6 +44,7 @@ def get_msgfromserver(socketsession):
     raise ValueError
 
 # парсим словарь
+@log
 def answerfromserver():
     answer = get_msgfromserver()
     if "response" in answer:
