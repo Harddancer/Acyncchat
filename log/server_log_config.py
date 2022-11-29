@@ -2,7 +2,7 @@ import sys
 import os
 import logging
 import logging.handlers
-LOGGER = logging.getLogger('server')
+LOG = logging.getLogger('server')
 
 # создаём формировщик логов
 format_msg = logging.Formatter('%(asctime)s %(levelname)s %(filename)s %(message)s')
@@ -19,13 +19,13 @@ LOGS = logging.handlers.TimedRotatingFileHandler(PATH, encoding='utf8', interval
 LOGS.setFormatter(format_msg)
 
 # создаём регистратор и настраиваем его
-LOGGER.addHandler(handler_log)
-LOGGER.addHandler(LOGS)
-LOGGER.setLevel(logging.DEBUG)
+LOG.addHandler(handler_log)
+LOG.addHandler(LOGS)
+LOG.setLevel(logging.DEBUG)
 
 # отладка
 if __name__ == '__main__':
-    LOGGER.critical('Критическая ошибка')
-    LOGGER.error('Ошибка')
-    LOGGER.debug('Отладочная информация')
-    LOGGER.info('Информационное сообщение')
+    LOG.critical('Критическая ошибка')
+    LOG.error('Ошибка')
+    LOG.debug('Отладочная информация')
+    LOG.info('Информационное сообщение')

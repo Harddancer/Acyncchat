@@ -17,7 +17,7 @@ clientlog_file.setFormatter(format_msg)
 # логи берем из потока ошибок
 hand_log = logging.StreamHandler(sys.stderr)
 # устанавливаем уровень важности сообщения от warning  и выше
-hand_log.setLevel(logging.WARNING)
+hand_log.setLevel(logging.INFO)
 # устанавливаем формат записи сообщения из потока ошибок
 hand_log.setFormatter(format_msg)
 
@@ -30,7 +30,7 @@ LOG_CLIENT.addHandler(hand_log)
 # у объекта логгера вызываем метод для для добавления  переменной с инф куда записывать логи
 LOG_CLIENT.addHandler(clientlog_file)
 # у объекта логгера вызываем метод для установления важности сообщений будет записывать debug и выше
-LOG_CLIENT.setLevel(logging.DEBUG)
+LOG_CLIENT.setLevel(logging.INFO)
 
 # отладка
 if __name__ == '__main__':
