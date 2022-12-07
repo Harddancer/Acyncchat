@@ -3,18 +3,22 @@ import json
 import select
 import socket
 import logging
+from tkinter import S
 import log.server_log_config
 from decor import log
 
 LOG = logging.getLogger('server')
 # получаем сообщение от клиента и декодируем, формируем из json словарь  
 @log 
-def get_msg_from_client_registraton(sockets):
+def get_msg_from_client_registraton(sockets,names):
     responses = sockets.recv(1024).decode("utf-8")
     encoded_resp = json.loads(responses)
     if isinstance(encoded_resp, dict):
         print(f"Новый пользователь {encoded_resp['user']['account_name']}")
-        return encoded_resp
+        if encoded_resp['user']['account_name'] not in names.keys():
+            names[sockets] = encoded_resp['user']['account_name']
+            
+        return encoded_resp,
     raise ValueError
 
 @log
@@ -42,8 +46,9 @@ def message_from_client(data):
     answerclient = json.loads(responses)
     if "action" in answerclient and answerclient["action"] == "message" \
         and answerclient["message_text"] != "":
+        
         print("сообщение получено")
-        return answerclient
+        return answerclient,answerclient["destination"]
     else:
         print("Не корректное соообщение")
 
@@ -108,64 +113,59 @@ def main():
     all_clients_reg = [transport]
     
     messages = {}
+    names = dict()
     
     
     print('\nОжидание подключения...')
     
     while True:
         try:
-            new_conn, client_addr = transport.accept()
+            reads, send, excepts = select.select(all_clients_reg, all_clients_reg, all_clients_reg)
         except OSError:
             pass
         else:
-            LOG.info(f'Установлено соедение с ПК {client_addr}')
-            all_clients_reg.append(new_conn)
-        
-        reads, send, excepts = select.select(all_clients_reg, all_clients_reg, all_clients_reg)
-        print(reads)
+            LOG.info(f'Cокеты подготовлены {reads}')
+            print(reads)
+            
         #Проверяем на наличие ждущих клиентов(сокетов) клиенты кот устанавливают соединение
         if reads:
             
-            for conn in reads:
-                if conn == transport:
+            for s in reads:
+                if s == transport:
+                    conn,client_addr = s.accept()
                     print("Connected by", client_addr)
-                    msg_from_client = get_msg_from_client_registraton(new_conn)
-                    push_coding_msg_to_client_registration(new_conn,msg_from_client)
+                    msg_from_client = get_msg_from_client_registraton(conn,names)
+                    push_coding_msg_to_client_registration(conn,msg_from_client)
+                    conn.setblocking(0)
+                    all_clients_reg.append(conn)
                 else:
                     #print("если это НЕ серверный сокет")
-                    data = conn.recv(1024)
+                    data = s.recv(1024)
                     if data:
-                        messages.get(conn, None)
-                        messages[conn].append(data)
-                        msg = message_from_client(data)
+                        messages.get(s, None)
+                        messages[s]=data
+                        msg,to_client= message_from_client(data)
                         for sockets in send:
-                            sockets.send(message_to_all_encode(msg))
-                            print("отправлено всем")
-                    else:
-                        messages[conn] = [data]
-                        msg = message_from_client(data)
-                        for sockets in send:
-                            if sockets != conn:
-                                sockets.send(message_to_all_encode(msg))
-                                print("отправлено всем")
-                        
-
-         
+                            if sockets  in names.keys():
+                                to_clients = names[sockets]
+                                if to_client == to_clients:
+                                    sockets.send(message_to_all_encode(msg,to_clients))
+                                    print(f"отправлено {to_client}")
                     if not data:
-                        all_clients_reg.append(conn)
+                        print("сообщения не было нечего отправлять")
                     else:
                         print('Клиент отключился...')
                         # если сообщений нет, то клиент
                         # закрыл соединение или отвалился 
                         # удаляем его сокет из всех очередей
-                    if conn in all_clients_reg:
-                        all_clients_reg.remove(conn)
+                    
+                        all_clients_reg.remove(s)
                         
                                 # закрываем сокет как положено, тем 
                                 # самым очищаем используемые ресурсы
-                        conn.close()
+                        s.close()
                                 # удаляем сообщения для данного сокета
-                        del messages[conn]
+                        del messages[s]
 
       
 
