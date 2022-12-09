@@ -3,66 +3,56 @@ import json
 import select
 import socket
 import logging
-from tkinter import S
+from get_send import get_msg_from_client,send_coding_msg_to_client
 import log.server_log_config
 from decor import log
-
 LOG = logging.getLogger('server')
-# получаем сообщение от клиента и декодируем, формируем из json словарь  
-@log 
-def get_msg_from_client_registraton(sockets,names):
-    responses = sockets.recv(1024).decode("utf-8")
-    encoded_resp = json.loads(responses)
-    if isinstance(encoded_resp, dict):
-        print(f"Новый пользователь {encoded_resp['user']['account_name']}")
-        if encoded_resp['user']['account_name'] not in names.keys():
-            names[sockets] = encoded_resp['user']['account_name']
-            
-        return encoded_resp,
-    raise ValueError
-
-@log
-def push_coding_msg_to_client_registration(sockets,msg_from_client):
-    if "action" in msg_from_client and msg_from_client["action"] == "presence" \
-        and "user" in msg_from_client and msg_from_client["user"]["account_name"] != "":
-        msg ={"response":200,"Client":msg_from_client['user']['account_name']}
-        js_msg = json.dumps(msg)
-        encoded_msg = js_msg.encode("utf-8")
-        sockets.send(encoded_msg)
-        print(str(encoded_msg))
-    else:
-        msg ={"response":400,"Отказ в регистрации Клиент":msg_from_client['user']['account_name']}
-        js_msg = json.dumps(msg)
-        encoded_msg = js_msg.encode("utf-8")
-        sockets.send(encoded_msg)
-        print(encoded_msg)
-
 
 # парсим и валидируем сообщение от клиента на наличие \
 # создания соединения или на получения сообщения от клиента, формируем ответ 
 @log
-def message_from_client(data):
-    responses = data.decode("utf-8")
-    answerclient = json.loads(responses)
-    if "action" in answerclient and answerclient["action"] == "message" \
-        and answerclient["message_text"] != "":
-        
-        print("сообщение получено")
-        return answerclient,answerclient["destination"]
+def message_from_client(data,data_list,client_socket,clients,to_senders:dict):
+    if "action" in data and data["action"] == "presence":
+        if data['user']['account_name'] not in to_senders.keys():
+            to_senders[data['user']['account_name']] = client_socket
+            send_coding_msg_to_client(client_socket, {"response": 200})
+        else:
+            response = {"response": 400}
+            send_coding_msg_to_client(client_socket, response)
+            clients.remove(client_socket)
+            client_socket.close()
+        return
+    elif "action" in data and data["action"] == "message" and \
+            "destination" in data\
+            and "sender" in data and "message_text" in data:
+        data_list.append(data)
+        return
+    # Если клиент выходит
+    elif "action" in data and data["action"] == "exit" and "action" in data:
+        data_list.remove(to_senders[data["action"]])
+        to_senders[data["action"]].close()
+        del to_senders[data["action"]]
+        return
+    # Иначе отдаём Bad request
     else:
-        print("Не корректное соообщение")
-
+        response = {"response": 400}
+        send_coding_msg_to_client(client_socket, response)
+        return
+        
 @log
-def message_to_all_encode(data:dict):
-    new_msg ={
-        "action":"message",
-        "sender":data['account_name'],
-        "message_text":data['message_text']
+def message_to_target_client(data, to_senders, sends):
+    
+    if data["destination"] in to_senders and to_senders[data["destination"]] in sends:
+        send_coding_msg_to_client(to_senders[data["destination"]], data)
+        LOG.info(f'Отправлено сообщение пользователю {data["destination"]} '
+                    f'от пользователя {data["sender"]}.')
+    elif data["destination"] in to_senders and to_senders[data["destination"]] not in sends:
+        raise (f"Соединение разорвано")
+    else:
+        LOG.error(
+            f'Пользователь {data["destination"]} не зарегистрирован на сервере, '
+            f'отправка сообщения невозможна.')
 
-    }
-    js_answerclient = json.dumps(new_msg)
-    msg_to_clients = js_answerclient.encode("utf-8")
-    return msg_to_clients
     
 
 def main():
@@ -101,77 +91,69 @@ def main():
 
     transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     transport.bind((listen_address, listen_port))
-    #transport.settimeout(100)
+    transport.settimeout(0.5)
     LOG.info(f'Подготовлен транспортный сокет{transport}  адрес {listen_address} порт {listen_port}')
-    
+     # список клиентов , очередь сообщений
+    clients = []
+    data_list = []
+     # Словарь, содержащий имена пользователей и соответствующие им сокеты.
+    to_senders = dict()
     # Слушаем порт
-
     transport.listen(5)
  
    
-    #список клиентов , очередь сообщений
-    all_clients_reg = [transport]
     
-    messages = {}
-    names = dict()
+
     
     
     print('\nОжидание подключения...')
     
     while True:
+        # Ждём подключения, если таймаут вышел, ловим исключение.
         try:
-            reads, send, excepts = select.select(all_clients_reg, all_clients_reg, all_clients_reg)
+            client_sockets, client_address = transport.accept()
         except OSError:
             pass
         else:
-            LOG.info(f'Cокеты подготовлены {reads}')
-            print(reads)
-            
-        #Проверяем на наличие ждущих клиентов(сокетов) клиенты кот устанавливают соединение
+            LOG.info(f'Установлено соедение с ПК {client_address}')
+            clients.append(client_sockets)
+            print(clients)
+
+        reads = []
+        sends = []
+        err_lst = []
+        # Проверяем на наличие ждущих клиентов
+        try:
+            if clients:
+                reads, sends, err_lst = select.select(clients, clients, [], 0)
+        except OSError:
+            pass
+
+        # принимаем сообщения и если ошибка, исключаем клиента.
+        print(reads)
         if reads:
+            print(f'{reads}+второй')
             
-            for s in reads:
-                if s == transport:
-                    conn,client_addr = s.accept()
-                    print("Connected by", client_addr)
-                    msg_from_client = get_msg_from_client_registraton(conn,names)
-                    push_coding_msg_to_client_registration(conn,msg_from_client)
-                    conn.setblocking(0)
-                    all_clients_reg.append(conn)
-                else:
-                    #print("если это НЕ серверный сокет")
-                    data = s.recv(1024)
-                    if data:
-                        messages.get(s, None)
-                        messages[s]=data
-                        msg,to_client= message_from_client(data)
-                        for sockets in send:
-                            if sockets  in names.keys():
-                                to_clients = names[sockets]
-                                if to_client == to_clients:
-                                    sockets.send(message_to_all_encode(msg,to_clients))
-                                    print(f"отправлено {to_client}")
-                    if not data:
-                        print("сообщения не было нечего отправлять")
-                    else:
-                        print('Клиент отключился...')
-                        # если сообщений нет, то клиент
-                        # закрыл соединение или отвалился 
-                        # удаляем его сокет из всех очередей
-                    
-                        all_clients_reg.remove(s)
-                        
-                                # закрываем сокет как положено, тем 
-                                # самым очищаем используемые ресурсы
-                        s.close()
-                                # удаляем сообщения для данного сокета
-                        del messages[s]
+            for client_sockets_with_message in reads:
+                try:
+                    message_from_client(get_msg_from_client(client_sockets_with_message),
+                                           data_list, client_sockets_with_message, clients, to_senders)
+                except Exception:
+                    LOG.info(f'Клиент {client_sockets_with_message.getpeername()} '
+                                f'отключился от сервера.')
+                    clients.remove(client_sockets_with_message)
 
-      
+        # Если есть сообщения, обрабатываем каждое.
+        for msg in data_list:
+            try:
+                message_to_target_client(msg, to_senders, sends)
+            except Exception:
+                LOG.info(f'Связь с клиентом с именем {msg["destination"]} была потеряна')
+                clients.remove(to_senders[msg["destination"]])
+                del to_senders[msg["destination"]]
+        data_list.clear()
 
-     
 
-        
 if __name__ == '__main__':
     main()
 
